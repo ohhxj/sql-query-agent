@@ -7,7 +7,6 @@ export interface Database {
 export interface Table {
   name: string;
   comment: string;
-  tags: string[];
   fields: Field[];
 }
 
@@ -17,20 +16,33 @@ export interface Field {
   comment: string;
 }
 
-export interface Tag {
-  id: string;
-  name: string;
+export interface FieldMapping {
+  tableId: string;  // "dbName.tableName"
+  fieldName: string;
+  mappings: Record<string, string>;  // { "1": "待合作", "2": "已合作" }
 }
 
-export type AggregateType = 'none' | 'SUM' | 'AVG' | 'COUNT' | 'MAX' | 'MIN';
+export type AggregateType =
+  | 'none'
+  | 'SUM'
+  | 'AVG'
+  | 'COUNT'
+  | 'MAX'
+  | 'MIN'
+  | 'DATE'
+  | 'DATETIME';
 
 export interface SelectedField {
+  id: string;
+  tableId?: string;
   tableName: string;
   tableComment: string;
+  sourceAlias?: string;
   fieldName: string;
   fieldComment: string;
   fieldType: string;
   aggregate: AggregateType;
+  valueMappings?: Record<string, string>;
   orderBy?: 'ASC' | 'DESC' | null;
   alias?: string;
 }
@@ -54,6 +66,7 @@ export type JoinType = 'INNER' | 'LEFT' | 'RIGHT';
 
 export interface JoinConfig {
   id: string;
+  alias: string;
   joinedDbName: string;
   joinedTableName: string;
   joinedTableComment: string;
@@ -99,5 +112,4 @@ export interface RiskResult {
 
 export interface ImportedJSON {
   databases: Database[];
-  tags?: Tag[];
 }

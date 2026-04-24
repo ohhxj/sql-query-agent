@@ -1,4 +1,5 @@
-import type { Database, Field, ImportedJSON, Table, Tag } from '@/types';
+import type { Database, Field, FieldMapping, ImportedJSON, Table } from '@/types';
+import { extractMappingsFromComment } from '@/utils/fieldMapping';
 
 interface LegacyJSON {
   database?: string;
@@ -29,10 +30,6 @@ function isDBAExportFormat(json: unknown): json is DBAExportFormat {
   return Array.isArray(dba.header) && Array.isArray(dba.data) && dba.data.length > 0;
 }
 
-function generateId(): string {
-  return Math.random().toString(36).substring(2, 11);
-}
-
 function parseField(raw: { name: string; type: string; comment?: string }): Field {
   return {
     name: raw.name,
@@ -45,7 +42,6 @@ function parseTable(raw: { name: string; comment?: string; fields: Array<{ name:
   return {
     name: raw.name,
     comment: raw.comment || '',
-    tags: [],
     fields: raw.fields.map(parseField),
   };
 }
@@ -61,8 +57,26 @@ function parseDatabase(raw: { name: string; comment?: string; tables: Array<{ na
 export interface ParseResult {
   success: boolean;
   databases: Database[];
-  tags: Tag[];
+  fieldMappings: FieldMapping[];
   error?: string;
+}
+
+function collectFieldMappings(databases: Database[]): FieldMapping[] {
+  const fieldMappings: FieldMapping[] = [];
+
+  for (const db of databases) {
+    for (const table of db.tables) {
+      const tableId = `${db.name}.${table.name}`;
+      for (const field of table.fields) {
+        const mapping = extractMappingsFromComment(field.comment, tableId, field.name);
+        if (mapping) {
+          fieldMappings.push(mapping);
+        }
+      }
+    }
+  }
+
+  return fieldMappings;
 }
 
 export function parseJSON(jsonString: string): ParseResult {
@@ -78,7 +92,7 @@ export function parseJSON(jsonString: string): ParseResult {
       return {
         success: true,
         databases: [legacyDb],
-        tags: [],
+        fieldMappings: collectFieldMappings([legacyDb]),
       };
     }
 
@@ -96,7 +110,6 @@ export function parseJSON(jsonString: string): ParseResult {
       const table: Table = {
         name: tableName,
         comment: tableComment,
-        tags: [],
         fields,
       };
 
@@ -109,7 +122,7 @@ export function parseJSON(jsonString: string): ParseResult {
       return {
         success: true,
         databases: [db],
-        tags: [],
+        fieldMappings: collectFieldMappings([db]),
       };
     }
 
@@ -117,7 +130,7 @@ export function parseJSON(jsonString: string): ParseResult {
       return {
         success: false,
         databases: [],
-        tags: [],
+        fieldMappings: [],
         error: 'Invalid format: missing "databases" array',
       };
     }
@@ -125,21 +138,17 @@ export function parseJSON(jsonString: string): ParseResult {
     const result: ParseResult = {
       success: true,
       databases: (parsed as ImportedJSON).databases.map(parseDatabase),
-      tags: (parsed as ImportedJSON).tags || [],
+      fieldMappings: [],
     };
 
-    for (const tag of result.tags) {
-      if (!tag.id) {
-        tag.id = generateId();
-      }
-    }
+    result.fieldMappings = collectFieldMappings(result.databases);
 
     return result;
   } catch (e) {
     return {
       success: false,
       databases: [],
-      tags: [],
+      fieldMappings: [],
       error: `JSON parse error: ${e instanceof Error ? e.message : 'Unknown error'}`,
     };
   }

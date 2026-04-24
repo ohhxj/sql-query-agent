@@ -81,21 +81,16 @@ export const useQueryBuilderStore = create<QueryBuilderState>((set, get) => ({
 
   addField: (field) => {
     const { selectedFields } = get();
-    const exists = selectedFields.some(
-      (f) => f.tableName === field.tableName && f.fieldName === field.fieldName
-    );
-    if (!exists) {
-      set({ selectedFields: [...selectedFields, field] });
-    }
+    set({ selectedFields: [...selectedFields, field] });
   },
 
   removeField: (field) => {
     set((state) => ({
       selectedFields: state.selectedFields.filter(
-        (f) => !(f.tableName === field.tableName && f.fieldName === field.fieldName)
+        (f) => f.id !== field.id
       ),
       orderByFields: state.orderByFields.filter(
-        (o) => !(o.field.tableName === field.tableName && o.field.fieldName === field.fieldName)
+        (o) => o.field.id !== field.id
       ),
     }));
   },
@@ -103,7 +98,7 @@ export const useQueryBuilderStore = create<QueryBuilderState>((set, get) => ({
   updateFieldAggregate: (field, aggregate) => {
     set((state) => ({
       selectedFields: state.selectedFields.map((f) => {
-        if (f.tableName === field.tableName && f.fieldName === field.fieldName) {
+        if (f.id === field.id) {
           return { ...f, aggregate };
         }
         return f;
@@ -123,7 +118,7 @@ export const useQueryBuilderStore = create<QueryBuilderState>((set, get) => ({
   removeJoinConfig: (id) => {
     set((state) => ({
       joinConfigs: state.joinConfigs.filter((c) => c.id !== id),
-      joinSelectedFields: state.joinSelectedFields.filter((f) => f.tableName !== id),
+      joinSelectedFields: state.joinSelectedFields.filter((f) => f.sourceAlias !== state.joinConfigs.find((c) => c.id === id)?.alias),
     }));
   },
 
@@ -135,21 +130,16 @@ export const useQueryBuilderStore = create<QueryBuilderState>((set, get) => ({
 
   addJoinField: (field) => {
     const { joinSelectedFields } = get();
-    const exists = joinSelectedFields.some(
-      (f) => f.tableName === field.tableName && f.fieldName === field.fieldName
-    );
-    if (!exists) {
-      set({ joinSelectedFields: [...joinSelectedFields, field] });
-    }
+    set({ joinSelectedFields: [...joinSelectedFields, field] });
   },
 
   removeJoinField: (field) => {
     set((state) => ({
       joinSelectedFields: state.joinSelectedFields.filter(
-        (f) => !(f.tableName === field.tableName && f.fieldName === field.fieldName)
+        (f) => f.id !== field.id
       ),
       orderByFields: state.orderByFields.filter(
-        (o) => !(o.field.tableName === field.tableName && o.field.fieldName === field.fieldName)
+        (o) => o.field.id !== field.id
       ),
     }));
   },
@@ -177,20 +167,16 @@ export const useQueryBuilderStore = create<QueryBuilderState>((set, get) => ({
 
   setOrderBy: (field, direction) => {
     const { orderByFields } = get();
-    const existing = orderByFields.find(
-      (o) => o.field.tableName === field.tableName && o.field.fieldName === field.fieldName
-    );
+    const existing = orderByFields.find((o) => o.field.id === field.id);
 
     if (direction === null) {
       set({
-        orderByFields: orderByFields.filter(
-          (o) => !(o.field.tableName === field.tableName && o.field.fieldName === field.fieldName)
-        ),
+        orderByFields: orderByFields.filter((o) => o.field.id !== field.id),
       });
     } else if (existing) {
       set({
         orderByFields: orderByFields.map((o) =>
-          o.field.tableName === field.tableName && o.field.fieldName === field.fieldName
+          o.field.id === field.id
             ? { ...o, direction }
             : o
         ),
@@ -202,9 +188,7 @@ export const useQueryBuilderStore = create<QueryBuilderState>((set, get) => ({
 
   removeOrderBy: (field) => {
     set((state) => ({
-      orderByFields: state.orderByFields.filter(
-        (o) => !(o.field.tableName === field.tableName && o.field.fieldName === field.fieldName)
-      ),
+      orderByFields: state.orderByFields.filter((o) => o.field.id !== field.id),
     }));
   },
 

@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useDatabaseStore } from '@/stores/useDatabaseStore';
 import { useQueryBuilderStore } from '@/stores/useQueryBuilderStore';
 import { getFieldIcon } from '@/utils/jsonParser';
+import { cleanTableComment } from '@/utils/sqlParser';
+import type { Field } from '@/types';
 
 export function DatabaseTree() {
   const {
@@ -9,30 +11,46 @@ export function DatabaseTree() {
     selectedDatabase,
     expandedDatabases,
     expandedTables,
-    tags,
     setSelectedDatabase,
     updateDatabase,
     updateTable,
     createDatabase,
     toggleDatabaseExpand,
     toggleTableExpand,
-    getFilteredTables,
-    addTagToTables,
-    removeTagFromTables,
-    getTagById,
+    getAllTables,
+    deleteDatabase,
+    setFieldMapping,
+    getFieldMapping,
   } = useDatabaseStore();
 
-  const { mainTable, setMainTable } = useQueryBuilderStore();
+  const { mainTable } = useQueryBuilderStore();
 
   const [editingDb, setEditingDb] = useState<string | null>(null);
   const [editingTable, setEditingTable] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
-  const [selectedTableIds, setSelectedTableIds] = useState<Set<string>>(new Set());
-  const [showTagMenu, setShowTagMenu] = useState(false);
   const [showNewDbInput, setShowNewDbInput] = useState(false);
   const [newDbName, setNewDbName] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; field: Field; tableId: string } | null>(null);
 
-  const filteredTables = getFilteredTables();
+  const filteredTables = getAllTables().filter((table) => {
+    const keyword = searchTerm.trim().toLowerCase();
+    if (!keyword) {
+      return true;
+    }
+
+    const fieldMatched = table.fields.some(
+      (field) =>
+        field.name.toLowerCase().includes(keyword) ||
+        field.comment.toLowerCase().includes(keyword)
+    );
+
+    return (
+      table.name.toLowerCase().includes(keyword) ||
+      table.comment.toLowerCase().includes(keyword) ||
+      fieldMatched
+    );
+  });
 
   const handleDbClick = (dbName: string) => {
     if (selectedDatabase === dbName) {
@@ -69,30 +87,6 @@ export function DatabaseTree() {
       updateTable(dbName, tableName, { name: editValue.trim() });
     }
     setEditingTable(null);
-  };
-
-  const toggleTableSelection = (tableId: string) => {
-    const newSet = new Set(selectedTableIds);
-    if (newSet.has(tableId)) {
-      newSet.delete(tableId);
-    } else {
-      newSet.add(tableId);
-    }
-    setSelectedTableIds(newSet);
-  };
-
-  const handleBulkAddTag = (tagId: string) => {
-    if (selectedTableIds.size > 0) {
-      addTagToTables(Array.from(selectedTableIds), tagId);
-      setShowTagMenu(false);
-      setSelectedTableIds(new Set());
-    }
-  };
-
-  const handleBulkRemoveTag = (tagId: string) => {
-    if (selectedTableIds.size > 0) {
-      removeTagFromTables(Array.from(selectedTableIds), tagId);
-    }
   };
 
   const handleCreateDb = () => {
@@ -150,62 +144,6 @@ export function DatabaseTree() {
 
   return (
     <div className="p-2 text-sm">
-      {selectedDatabase && tags.length > 0 && (
-        <div className="mb-2 px-2 py-1.5 bg-[var(--bg-elevated)] rounded-md">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-xs text-[var(--text-tertiary)]">批量打标签</span>
-            {selectedTableIds.size > 0 && (
-              <span className="text-xs text-primary-500">{selectedTableIds.size} 个表已选</span>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setShowTagMenu(!showTagMenu)}
-              disabled={selectedTableIds.size === 0}
-              className="text-xs px-2 py-1 bg-primary-500 text-white rounded hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              + 添加标签
-            </button>
-            {selectedTableIds.size > 0 && (
-              <button
-                onClick={() => setSelectedTableIds(new Set())}
-                className="text-xs px-2 py-1 border border-[var(--border-default)] rounded hover:bg-[var(--bg-overlay)] transition-colors"
-              >
-                取消选择
-              </button>
-            )}
-          </div>
-          {showTagMenu && (
-            <div className="mt-2 p-2 bg-[var(--bg-surface)] rounded border border-[var(--border-default)]">
-              <div className="flex flex-wrap gap-1">
-                {tags.map((tag) => (
-                  <button
-                    key={tag.id}
-                    onClick={() => handleBulkAddTag(tag.id)}
-                    className="text-xs px-2 py-1 bg-accent-400/20 text-accent-400 rounded hover:bg-accent-400/30 transition-colors"
-                  >
-                    + {tag.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          {selectedTableIds.size > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1">
-              {tags.map((tag) => (
-                <button
-                  key={tag.id}
-                  onClick={() => handleBulkRemoveTag(tag.id)}
-                  className="text-xs px-2 py-1 bg-risk-high/20 text-risk-high rounded hover:bg-risk-high/30 transition-colors"
-                >
-                  - {tag.name}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
       <div className="flex items-center gap-2 mb-2 px-2">
         <button
           onClick={() => setShowNewDbInput(!showNewDbInput)}
@@ -240,10 +178,27 @@ export function DatabaseTree() {
         )}
       </div>
 
+      <div className="mb-2 px-2">
+        <div className="relative">
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="搜索表名、表备注、字段名"
+            className="w-full rounded-md border border-[var(--border-default)] bg-[var(--bg-elevated)] px-3 py-1.5 pr-8 text-xs text-[var(--text-primary)] focus:border-primary-500 focus:outline-none"
+          />
+          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]">
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-4.35-4.35m1.85-5.15a7 7 0 11-14 0 7 7 0 0114 0Z" />
+            </svg>
+          </span>
+        </div>
+      </div>
+
       {databases.map((db) => (
         <div key={db.name} className="mb-2">
           <div
-            className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors ${
+            className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors group ${
               selectedDatabase === db.name
                 ? 'bg-primary-500/10 text-primary-500'
                 : 'hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)]'
@@ -277,10 +232,24 @@ export function DatabaseTree() {
               />
             ) : (
               <>
-                <span className="font-medium truncate max-w-[180px]" title={db.name}>{db.name}</span>
+                <span className="font-medium truncate max-w-[140px]" title={db.name}>{db.name}</span>
                 {db.comment && (
-                  <span className="text-[var(--text-tertiary)] text-xs truncate max-w-[120px]" title={db.comment}>({db.comment})</span>
+                  <span className="text-[var(--text-tertiary)] text-xs truncate max-w-[100px]" title={db.comment}>({db.comment})</span>
                 )}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (confirm(`确定删除数据库 ${db.name} 吗？`)) {
+                      deleteDatabase(db.name);
+                    }
+                  }}
+                  className="ml-auto p-1 text-risk-high hover:bg-risk-high/20 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                  title="删除数据库"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
               </>
             )}
           </div>
@@ -288,28 +257,18 @@ export function DatabaseTree() {
           {expandedDatabases.includes(db.name) && selectedDatabase === db.name && (
             <div className="ml-4 mt-1">
               {filteredTables.map((table) => {
-                const tableId = `${db.name}.${table.name}`;
-                const isSelected = selectedTableIds.has(tableId);
+                const displayTableComment = cleanTableComment(table.comment);
                 return (
                   <div key={table.name} className="relative">
                     <div
                       className={`flex items-center gap-2 px-2 py-1 rounded-md cursor-pointer transition-colors group ${
                         mainTable?.name === table.name && mainTable?.comment === table.comment
                           ? 'bg-primary-500/20 text-primary-500 border-l-2 border-primary-500'
-                          : isSelected
-                          ? 'bg-primary-500/10 text-primary-500'
                           : 'hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)]'
                       }`}
-                      onClick={() => setMainTable(table)}
+                      onClick={() => toggleTableExpand(`${db.name}.${table.name}`)}
                       onDoubleClick={() => handleTableDoubleClick(table.name)}
                     >
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleTableSelection(tableId)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="w-3.5 h-3.5 rounded border-[var(--border-default)] text-primary-500 focus:ring-primary-500"
-                      />
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -343,25 +302,10 @@ export function DatabaseTree() {
                       ) : (
                         <>
                           <span className="truncate max-w-[150px]" title={table.name}>{table.name}</span>
-                          {table.comment && (
-                            <span className="text-[var(--text-tertiary)] text-xs truncate max-w-[100px]" title={table.comment}>({table.comment})</span>
+                          {displayTableComment && (
+                            <span className="text-[var(--text-tertiary)] text-xs truncate max-w-[100px]" title={displayTableComment}>({displayTableComment})</span>
                           )}
                         </>
-                      )}
-                      {table.tags.length > 0 && (
-                        <span className="ml-auto flex gap-1">
-                          {table.tags.slice(0, 2).map((tagId) => {
-                            const tag = getTagById(tagId);
-                            return (
-                              <span
-                                key={tagId}
-                                className="px-1.5 py-0.5 text-[10px] rounded bg-accent-400/20 text-accent-400"
-                              >
-                                {tag?.name || tagId}
-                              </span>
-                            );
-                          })}
-                        </span>
                       )}
                     </div>
 
@@ -371,7 +315,11 @@ export function DatabaseTree() {
                           {table.fields.map((field) => (
                             <div
                               key={field.name}
-                              className="flex items-center gap-2 px-2 py-1 rounded text-[var(--text-tertiary)] text-xs hover:bg-[var(--bg-overlay)]"
+                              className="flex items-center gap-2 px-2 py-1 rounded text-[var(--text-tertiary)] text-xs hover:bg-[var(--bg-overlay)] cursor-context-menu"
+                              onContextMenu={(e) => {
+                                e.preventDefault();
+                                setContextMenu({ x: e.clientX, y: e.clientY, field, tableId: `${db.name}.${table.name}` });
+                              }}
                             >
                               <span>{getFieldIcon(field.type)}</span>
                               <span className="font-mono truncate max-w-[100px]" title={field.name}>{field.name}</span>
@@ -391,6 +339,41 @@ export function DatabaseTree() {
           )}
         </div>
       ))}
+      {contextMenu && (
+        <div
+          className="fixed bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-lg shadow-lg py-1 z-50"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          <button
+            className="w-full px-4 py-2 text-sm text-left hover:bg-[var(--bg-elevated)] text-[var(--text-primary)]"
+            onClick={() => {
+              const existing = getFieldMapping(contextMenu.tableId, contextMenu.field.name);
+              const currentMappings = existing?.mappings || {};
+              const newMapping = prompt(`为字段 ${contextMenu.field.name} 设置值映射\n格式: 1:待合作,2:已合作\n当前映射: ${JSON.stringify(currentMappings)}`);
+              if (newMapping !== null) {
+                const parsed: Record<string, string> = {};
+                newMapping.split(',').forEach((pair) => {
+                  const [key, value] = pair.split(':');
+                  if (key && value) parsed[key.trim()] = value.trim();
+                });
+                if (Object.keys(parsed).length > 0) {
+                  setFieldMapping(contextMenu.tableId, contextMenu.field.name, parsed);
+                }
+              }
+              setContextMenu(null);
+            }}
+          >
+            值映射配置
+          </button>
+        </div>
+      )}
+
+      {contextMenu && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 }

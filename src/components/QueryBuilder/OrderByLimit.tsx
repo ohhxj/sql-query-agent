@@ -1,4 +1,15 @@
 import { useQueryBuilderStore } from '@/stores/useQueryBuilderStore';
+import { formatSelectedFieldExpression, isTrueAggregate } from '@/utils/sqlGenerator';
+
+function getDisplayLabel(aggregate: string, fieldName: string): string {
+  if (aggregate === 'DATE') {
+    return `DATE(${fieldName})`;
+  }
+  if (aggregate === 'DATETIME') {
+    return `DATETIME(${fieldName})`;
+  }
+  return `${aggregate}(${fieldName})`;
+}
 
 export function OrderByLimit() {
   const {
@@ -19,15 +30,15 @@ export function OrderByLimit() {
     return null;
   }
 
-  const handleOrderChange = (fieldName: string, direction: 'ASC' | 'DESC' | null) => {
-    const field = mainTableFields.find((f) => f.fieldName === fieldName);
+  const handleOrderChange = (fieldId: string, direction: 'ASC' | 'DESC' | null) => {
+    const field = mainTableFields.find((f) => f.id === fieldId);
     if (field) {
       setOrderBy(field, direction);
     }
   };
 
-  const nonAggregatedFields = mainTableFields.filter((f) => f.aggregate === 'none');
-  const hasAggregates = mainTableFields.some((f) => f.aggregate !== 'none');
+  const nonAggregatedFields = mainTableFields.filter((f) => !isTrueAggregate(f.aggregate));
+  const hasAggregates = mainTableFields.some((f) => isTrueAggregate(f.aggregate));
 
   return (
     <div className="space-y-3">
@@ -47,7 +58,7 @@ export function OrderByLimit() {
 
           <div className="flex flex-wrap gap-2">
             {nonAggregatedFields.map((field) => {
-              const fieldRef = `${field.tableName}.${field.fieldName}`;
+              const fieldRef = formatSelectedFieldExpression(field);
               const isSelected = groupByFields.includes(fieldRef);
 
               return (
@@ -89,7 +100,7 @@ export function OrderByLimit() {
       <div className="space-y-1">
         {mainTableFields.map((field) => {
           const orderItem = orderByFields.find(
-            (o) => o.field.tableName === field.tableName && o.field.fieldName === field.fieldName
+            (o) => o.field.id === field.id
           );
           const currentDirection = orderItem?.direction || null;
 
@@ -100,7 +111,7 @@ export function OrderByLimit() {
             >
               <span className="flex-1 text-sm text-[var(--text-primary)] font-mono">
                 {field.aggregate !== 'none' ? (
-                  <span className="text-primary-500">{field.aggregate}({field.fieldName})</span>
+                  <span className="text-primary-500">{getDisplayLabel(field.aggregate, field.fieldName)}</span>
                 ) : (
                   field.fieldName
                 )}
@@ -114,7 +125,7 @@ export function OrderByLimit() {
                 onChange={(e) => {
                   const value = e.target.value;
                   handleOrderChange(
-                    field.fieldName,
+                    field.id,
                     value === '' ? null : (value as 'ASC' | 'DESC')
                   );
                 }}

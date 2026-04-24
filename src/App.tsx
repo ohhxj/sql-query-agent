@@ -1,6 +1,5 @@
 import { Header } from '@/components/Header';
 import { DatabaseTree } from '@/components/Sidebar/DatabaseTree';
-import { TagFilter } from '@/components/Sidebar/TagFilter';
 import { FieldSelector } from '@/components/QueryBuilder/FieldSelector';
 import { WhereBuilder } from '@/components/QueryBuilder/WhereBuilder';
 import { JoinConfig } from '@/components/QueryBuilder/JoinConfig';
@@ -16,8 +15,7 @@ function App() {
 
       <div className="flex-1 flex min-h-0">
         <aside className="w-80 flex-shrink-0 bg-[var(--bg-surface)] border-r border-[var(--border-subtle)] flex flex-col overflow-hidden">
-          <TagFilter />
-          <div className="flex-1 overflow-y-auto border-t border-[var(--border-subtle)]">
+          <div className="flex-1 overflow-y-auto">
             <DatabaseTree />
           </div>
         </aside>

@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useQueryBuilderStore } from '@/stores/useQueryBuilderStore';
-import { generateSQL, createDraft } from '@/utils/sqlGenerator';
+import { generateSQL, createDraft, isTrueAggregate } from '@/utils/sqlGenerator';
 
 interface ValidationIssue {
   type: string;
@@ -123,7 +123,7 @@ export function AIValidator() {
     }
 
     // 无聚合函数但有 GROUP BY
-    const hasAggregate = allSelectedFields.some((f) => f.aggregate !== 'none');
+    const hasAggregate = allSelectedFields.some((f) => isTrueAggregate(f.aggregate));
     if (groupByFields.length > 0 && !hasAggregate) {
       issues.push({
         type: 'logic',

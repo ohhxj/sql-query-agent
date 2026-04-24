@@ -13,6 +13,16 @@ interface TableWithDb {
   table: Table;
 }
 
+function buildJoinAlias(tableName: string, existingAliases: string[]): string {
+  let index = 1;
+  let alias = `${tableName}_${index}`;
+  while (existingAliases.includes(alias)) {
+    index += 1;
+    alias = `${tableName}_${index}`;
+  }
+  return alias;
+}
+
 export function JoinConfig() {
   const { databases } = useDatabaseStore();
   const { mainTable, joinConfigs, addJoinConfig, removeJoinConfig, updateJoinConfig } = useQueryBuilderStore();
@@ -47,6 +57,10 @@ export function JoinConfig() {
     const joinFirstField = firstTableWithDb.table.fields[0];
 
     addJoinConfig({
+      alias: buildJoinAlias(
+        firstTableWithDb.table.name,
+        joinConfigs.map((config) => config.alias)
+      ),
       joinedDbName: firstTableWithDb.dbName,
       joinedTableName: firstTableWithDb.table.name,
       joinedTableComment: firstTableWithDb.table.comment,
@@ -69,6 +83,10 @@ export function JoinConfig() {
     );
     if (tableWithDb) {
       updateJoinConfig(id, {
+        alias: buildJoinAlias(
+          tableWithDb.table.name,
+          joinConfigs.filter((config) => config.id !== id).map((config) => config.alias)
+        ),
         joinedDbName: tableWithDb.dbName,
         joinedTableName: tableWithDb.table.name,
         joinedTableComment: tableWithDb.table.comment,
@@ -82,6 +100,10 @@ export function JoinConfig() {
 
   const handleJoinTypeChange = (id: string, joinType: JoinType) => {
     updateJoinConfig(id, { joinType });
+  };
+
+  const handleAliasChange = (id: string, alias: string) => {
+    updateJoinConfig(id, { alias: alias.trim() || `join_${id.slice(0, 4)}` });
   };
 
   const handleLeftFieldChange = (id: string, fieldName: string) => {
@@ -150,6 +172,14 @@ export function JoinConfig() {
                       </option>
                     ))}
                   </select>
+
+                  <input
+                    type="text"
+                    value={config.alias}
+                    onChange={(e) => handleAliasChange(config.id, e.target.value)}
+                    className="w-28 flex-shrink-0 text-sm px-2 py-1.5 bg-[var(--bg-surface)] border border-[var(--border-default)] rounded focus:outline-none focus:border-primary-500 text-[var(--text-primary)]"
+                    placeholder="表别名"
+                  />
 
                   <select
                     value={config.joinType}

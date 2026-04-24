@@ -6,6 +6,11 @@ import type {
   SQLDraft,
   AggregateType,
 } from '@/types';
+import { stripMappingsFromComment } from '@/utils/fieldMapping';
+
+export function isTrueAggregate(aggregate: AggregateType): boolean {
+  return ['SUM', 'AVG', 'COUNT', 'MAX', 'MIN'].includes(aggregate);
+}
 
 function getAggregateFunction(aggregate: AggregateType): string {
   switch (aggregate) {
@@ -24,21 +29,70 @@ function getAggregateFunction(aggregate: AggregateType): string {
   }
 }
 
+export function formatSelectedFieldExpression(field: SelectedField): string {
+  const fieldRef = formatFieldName(field.tableName, field.fieldName, field.sourceAlias);
+
+  if (field.aggregate === 'DATE') {
+    return `DATE_FORMAT(FROM_UNIXTIME(${fieldRef}), '%Y-%m-%d')`;
+  }
+
+  if (field.aggregate === 'DATETIME') {
+    return `DATE_FORMAT(FROM_UNIXTIME(${fieldRef}), '%Y-%m-%d %H:%i:%s')`;
+  }
+
+  if (isTrueAggregate(field.aggregate)) {
+    return `${getAggregateFunction(field.aggregate)}(${fieldRef})`;
+  }
+
+  return fieldRef;
+}
+
 function formatFieldAlias(comment: string): string {
   if (!comment) return '';
-  // 去除冒号及其后面的内容，只保留冒号前的部分
-  const cleanComment = comment.split('：')[0].split(':')[0].trim();
+  const cleanComment = stripMappingsFromComment(comment)
+    .split('：')[0]
+    .split(':')[0]
+    .trim();
   if (!cleanComment) return '';
   return `AS "${cleanComment}"`;
 }
 
 export function cleanComment(comment: string): string {
   if (!comment) return '';
-  return comment.split('：')[0].split(':')[0].trim();
+  return stripMappingsFromComment(comment)
+    .split('：')[0]
+    .split(':')[0]
+    .trim();
 }
 
-function formatFieldName(tableName: string, fieldName: string): string {
-  return `\`${tableName}\`.\`${fieldName}\``;
+function formatFieldName(tableName: string, fieldName: string, sourceAlias?: string): string {
+  const source = sourceAlias || tableName;
+  return `\`${source}\`.\`${fieldName}\``;
+}
+
+function escapeSqlString(value: string): string {
+  return value.replace(/'/g, "\\'");
+}
+
+function buildMappingAlias(field: SelectedField): string {
+  const baseLabel = cleanComment(field.fieldComment) || field.alias || field.fieldName;
+  return `${baseLabel}名称`;
+}
+
+function formatMappedField(field: SelectedField, fieldRef: string): string | null {
+  if (!field.valueMappings || Object.keys(field.valueMappings).length === 0) {
+    return null;
+  }
+
+  const whenClauses = Object.entries(field.valueMappings).map(
+    ([key, value]) => `WHEN '${escapeSqlString(key)}' THEN '${escapeSqlString(value)}'`
+  );
+
+  if (whenClauses.length === 0) {
+    return null;
+  }
+
+  return `CASE ${fieldRef} ${whenClauses.join(' ')} ELSE '' END AS "${escapeSqlString(buildMappingAlias(field))}"`;
 }
 
 function formatValue(value: string | string[], operator: WhereOperator): string {
@@ -80,15 +134,21 @@ export function generateSelectClause(fields: SelectedField[]): string {
   }
 
   const selectParts = fields.map((f) => {
-    const fieldRef = formatFieldName(f.tableName, f.fieldName);
-    const alias = f.fieldComment || f.alias || '';
+    const fieldRef = formatFieldName(f.tableName, f.fieldName, f.sourceAlias);
+    if (f.aggregate === 'none' && f.valueMappings && Object.keys(f.valueMappings).length > 0) {
+      return `  ${formatMappedField(f, fieldRef)}`.trim();
+    }
 
+    const alias = f.fieldComment || f.alias || '';
     if (f.aggregate === 'none') {
       return `  ${fieldRef} ${formatFieldAlias(alias)}`.trim();
     }
 
-    const aggFunc = getAggregateFunction(f.aggregate);
-    return `  ${aggFunc}(${fieldRef}) ${formatFieldAlias(alias)}`.trim();
+    if (f.aggregate === 'DATE' || f.aggregate === 'DATETIME') {
+      return `  ${formatSelectedFieldExpression(f)} ${formatFieldAlias(alias)}`.trim();
+    }
+
+    return `  ${getAggregateFunction(f.aggregate)}(${fieldRef}) ${formatFieldAlias(alias)}`.trim();
   });
 
   return `SELECT\n${selectParts.join(',\n')}`;
@@ -109,9 +169,9 @@ export function generateJoinClause(configs: JoinConfig[]): string {
       ? `\`${config.joinedDbName}\`.\`${config.joinedTableName}\``
       : `\`${config.joinedTableName}\``;
     const leftField = formatFieldName(config.leftField.tableName, config.leftField.fieldName);
-    const rightField = formatFieldName(config.rightField.tableName, config.rightField.fieldName);
+    const rightField = formatFieldName(config.rightField.tableName, config.rightField.fieldName, config.alias);
 
-    return `${joinType} JOIN ${joinedTable} ON ${leftField} = ${rightField}`;
+    return `${joinType} JOIN ${joinedTable} AS \`${config.alias}\` ON ${leftField} = ${rightField}`;
   });
 
   return joinParts.join('\n');
@@ -156,12 +216,7 @@ export function generateOrderByClause(
   }
 
   const orderParts = orderedFields.map(({ field, direction }) => {
-    const fieldRef =
-      field.aggregate === 'none'
-        ? formatFieldName(field.tableName, field.fieldName)
-        : `${getAggregateFunction(field.aggregate)}(${formatFieldName(field.tableName, field.fieldName)})`;
-
-    return `${fieldRef} ${direction}`;
+    return `${formatSelectedFieldExpression(field)} ${direction}`;
   });
 
   return `ORDER BY\n  ${orderParts.join(',\n  ')}`;
