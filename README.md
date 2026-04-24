@@ -2,6 +2,10 @@
 
 可视化 SQL 生成工具。通过图形界面选择主表、配置字段、设置条件和关联关系，快速拼装查询 SQL，适合内部数据表较多、字段注释不够统一的场景。
 
+## 模块概览
+
+![SQL Query Agent 模块概览](docs/images/module-overview.png)
+
 ## 当前能力
 
 - 支持 `JSON` 和 `SQL DDL` 两种格式导入库表结构
