@@ -7,10 +7,12 @@ import { OrderByLimit } from '@/components/QueryBuilder/OrderByLimit';
 import { SQLPreview } from '@/components/SQLPreview/SQLPreview';
 import { RiskPanel } from '@/components/Validation/RiskPanel';
 import { AIValidator } from '@/components/Validation/AIValidator';
+import { GlobalErrorCatcher } from '@/components/GlobalErrorCatcher';
 
 function App() {
   return (
     <div className="h-screen flex flex-col bg-[var(--bg-base)]">
+      <GlobalErrorCatcher />
       <Header />
 
       <div className="flex-1 flex min-h-0">

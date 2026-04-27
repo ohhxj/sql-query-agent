@@ -86,6 +86,26 @@ export interface SQLDraft {
   limit: number | null;
 }
 
+export interface QueryHistorySnapshot {
+  selectedDatabase: string | null;
+  mainTable: Table | null;
+  selectedFields: SelectedField[];
+  joinConfigs: JoinConfig[];
+  joinSelectedFields: SelectedField[];
+  whereConditions: WhereCondition[];
+  groupByFields: string[];
+  orderByFields: { field: SelectedField; direction: 'ASC' | 'DESC' | null }[];
+  limit: number | null;
+}
+
+export interface QueryHistoryItem {
+  id: string;
+  title: string;
+  sql: string;
+  createdAt: string;
+  snapshot: QueryHistorySnapshot;
+}
+
 export interface AIValidationResult {
   valid: boolean;
   issues: {

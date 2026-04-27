@@ -1,9 +1,10 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useDatabaseStore } from '@/stores/useDatabaseStore';
 import { isSQLFormat } from '@/utils/sqlParser';
+import helperAvatar from '@/assets/sql-helper-avatar.svg';
 
 export function Header() {
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [theme, setTheme] = useState<'dark' | 'light'>('light');
   const { importJSON, importSQL, createDatabase, databases } = useDatabaseStore();
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -13,6 +14,11 @@ export function Header() {
   const [newDbName, setNewDbName] = useState('');
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    window.dispatchEvent(new CustomEvent('themechange', { detail: theme }));
+  }, [theme]);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -84,17 +90,27 @@ export function Header() {
   const toggleTheme = () => {
     const newTheme = theme === 'dark' ? 'light' : 'dark';
     setTheme(newTheme);
-    document.documentElement.setAttribute('data-theme', newTheme);
   };
 
   return (
     <>
       <header className="h-14 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)] flex items-center justify-between px-4">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-md bg-primary-500 flex items-center justify-center">
-            <span className="text-white font-bold text-sm">SQL</span>
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-elevated)] shadow-sm">
+            <img
+              src={helperAvatar}
+              alt="SQL 小助手头像"
+              className="h-8 w-8"
+            />
           </div>
-          <h1 className="text-lg font-semibold text-[var(--text-primary)]">SQL 填写 Agent</h1>
+          <div className="flex flex-col leading-none">
+            <h1 className="text-lg font-semibold tracking-[0.02em] text-[var(--text-primary)]">
+              SQL 小助手
+            </h1>
+            <span className="mt-1 text-[11px] font-medium uppercase tracking-[0.26em] text-primary-500">
+              smart query mate
+            </span>
+          </div>
         </div>
 
         <div className="flex items-center gap-3">
