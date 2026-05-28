@@ -32,6 +32,24 @@ export type AggregateType =
   | 'DATE'
   | 'DATETIME';
 
+export type MetricScopePreset =
+  | 'ALL'
+  | 'VALID_ORDER'
+  | 'PAY_SUCCESS'
+  | 'SETTLED'
+  | 'ENTERED'
+  | 'REFUND'
+  | 'INSTITUTION_ORDER'
+  | 'ONLINE_SETTLE'
+  | 'OFFLINE_SETTLE';
+
+export type NumericTransformType =
+  | 'NONE'
+  | 'DIVIDE_100'
+  | 'DIVIDE_1000'
+  | 'PERCENT_100'
+  | 'PERCENT_10000';
+
 export interface SelectedField {
   id: string;
   tableId?: string;
@@ -42,6 +60,8 @@ export interface SelectedField {
   fieldComment: string;
   fieldType: string;
   aggregate: AggregateType;
+  metricScope?: MetricScopePreset;
+  numericTransform?: NumericTransformType;
   valueMappings?: Record<string, string>;
   orderBy?: 'ASC' | 'DESC' | null;
   alias?: string;

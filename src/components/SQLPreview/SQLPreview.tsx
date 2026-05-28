@@ -130,39 +130,39 @@ export function SQLPreview() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between p-3 border-b border-[var(--border-subtle)]">
+      <div className="flex flex-col gap-2 border-b border-[var(--border-subtle)] p-3">
         <span className="text-sm font-medium text-[var(--text-primary)]">SQL 预览</span>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={handleGenerate}
             disabled={!mainTable}
-            className="px-3 py-1.5 text-sm bg-primary-500 text-white rounded-md hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="rounded-md bg-primary-500 px-3 py-1.5 text-xs text-white transition-colors hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
             生成
           </button>
           <button
             onClick={handleCopy}
             disabled={!sql}
-            className="px-3 py-1.5 text-sm border border-[var(--border-default)] rounded-md hover:bg-[var(--bg-elevated)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-[var(--text-secondary)]"
+            className="rounded-md border border-[var(--border-default)] px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {copied ? '已复制!' : '复制'}
           </button>
           <button
             onClick={handleFormat}
             disabled={!sql}
-            className="px-3 py-1.5 text-sm border border-[var(--border-default)] rounded-md hover:bg-[var(--bg-elevated)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-[var(--text-secondary)]"
+            className="rounded-md border border-[var(--border-default)] px-3 py-1.5 text-xs text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-elevated)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             格式化
           </button>
           <button
             onClick={() => setShowHistory((current) => !current)}
-            className={`px-3 py-1.5 text-sm border border-[var(--border-default)] rounded-md transition-colors ${
+            className={`rounded-md border border-[var(--border-default)] px-3 py-1.5 text-xs transition-colors ${
               showHistory
                 ? 'bg-primary-500/10 text-primary-500 border-primary-500'
                 : 'hover:bg-[var(--bg-elevated)] text-[var(--text-secondary)]'
             }`}
           >
-            历史
+            记录
           </button>
         </div>
       </div>

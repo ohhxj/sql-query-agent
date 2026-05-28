@@ -3,6 +3,8 @@ import { persist } from 'zustand/middleware';
 import type {
   AggregateType,
   JoinConfig,
+  MetricScopePreset,
+  NumericTransformType,
   QueryHistoryItem,
   QueryHistorySnapshot,
   SelectedField,
@@ -31,6 +33,8 @@ interface QueryBuilderState {
   addField: (field: SelectedField) => void;
   removeField: (field: SelectedField) => void;
   updateFieldAggregate: (field: SelectedField, aggregate: AggregateType) => void;
+  updateFieldMetricScope: (field: SelectedField, metricScope: MetricScopePreset) => void;
+  updateFieldNumericTransform: (field: SelectedField, numericTransform: NumericTransformType) => void;
   clearFields: () => void;
 
   addGroupByField: (field: string) => void;
@@ -136,6 +140,28 @@ export const useQueryBuilderStore = create<QueryBuilderState>()(
         }));
       },
 
+      updateFieldMetricScope: (field, metricScope) => {
+        set((state) => ({
+          selectedFields: state.selectedFields.map((f) => {
+            if (f.id === field.id) {
+              return { ...f, metricScope };
+            }
+            return f;
+          }),
+        }));
+      },
+
+      updateFieldNumericTransform: (field, numericTransform) => {
+        set((state) => ({
+          selectedFields: state.selectedFields.map((f) => {
+            if (f.id === field.id) {
+              return { ...f, numericTransform };
+            }
+            return f;
+          }),
+        }));
+      },
+
       clearFields: () => {
         set({ selectedFields: [], orderByFields: [] });
       },
@@ -146,10 +172,24 @@ export const useQueryBuilderStore = create<QueryBuilderState>()(
       },
 
       removeJoinConfig: (id) => {
-        set((state) => ({
-          joinConfigs: state.joinConfigs.filter((c) => c.id !== id),
-          joinSelectedFields: state.joinSelectedFields.filter((f) => f.sourceAlias !== state.joinConfigs.find((c) => c.id === id)?.alias),
-        }));
+        set((state) => {
+          const removedConfig = state.joinConfigs.find((config) => config.id === id);
+          const removedAlias = removedConfig?.alias;
+          const removedSelectedFields = removedAlias
+            ? state.selectedFields.filter((field) => field.sourceAlias === removedAlias)
+            : [];
+          const removedGroupByExpressions = new Set(
+            removedSelectedFields.map((field) => formatSelectedFieldExpression(field))
+          );
+
+          return {
+            joinConfigs: state.joinConfigs.filter((config) => config.id !== id),
+            selectedFields: state.selectedFields.filter((field) => field.sourceAlias !== removedAlias),
+            joinSelectedFields: state.joinSelectedFields.filter((field) => field.sourceAlias !== removedAlias),
+            groupByFields: state.groupByFields.filter((expression) => !removedGroupByExpressions.has(expression)),
+            orderByFields: state.orderByFields.filter((item) => item.field.sourceAlias !== removedAlias),
+          };
+        });
       },
 
       updateJoinConfig: (id, updates) => {

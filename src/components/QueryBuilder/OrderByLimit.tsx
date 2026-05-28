@@ -22,9 +22,7 @@ function supportsTimeGrouping(fieldName: string, fieldType: string): boolean {
     lowerName.includes('date') ||
     lowerType.includes('timestamp') ||
     lowerType.includes('datetime') ||
-    lowerType.includes('date') ||
-    lowerType.includes('int') ||
-    lowerType.includes('bigint')
+    lowerType.includes('date')
   );
 }
 
@@ -79,22 +77,50 @@ export function OrderByLimit() {
     }
   };
 
-  const handleTimeGroupBy = (field: SelectedField, aggregate: AggregateType) => {
-    const previousExpression = formatSelectedFieldExpression(field);
-    const nextExpression = formatSelectedFieldExpression({ ...field, aggregate });
-    const hasPreviousSelection = groupByFields.includes(previousExpression);
-    const hasNextSelection = groupByFields.includes(nextExpression);
+  const getGroupExpression = (field: SelectedField, aggregate: AggregateType) =>
+    formatSelectedFieldExpression({ ...field, aggregate });
 
-    if (field.aggregate === aggregate) {
-      handleGroupByToggle(nextExpression, hasNextSelection);
+  const getCurrentGroupMode = (field: SelectedField): AggregateType | null => {
+    const rawExpression = getGroupExpression(field, 'none');
+    const dayExpression = getGroupExpression(field, 'DATE');
+    const dateTimeExpression = getGroupExpression(field, 'DATETIME');
+
+    if (groupByFields.includes(rawExpression)) {
+      return 'none';
+    }
+    if (groupByFields.includes(dayExpression)) {
+      return 'DATE';
+    }
+    if (groupByFields.includes(dateTimeExpression)) {
+      return 'DATETIME';
+    }
+
+    return null;
+  };
+
+  const applyGroupMode = (field: SelectedField, aggregate: AggregateType | null) => {
+    const rawExpression = getGroupExpression(field, 'none');
+    const dayExpression = getGroupExpression(field, 'DATE');
+    const dateTimeExpression = getGroupExpression(field, 'DATETIME');
+
+    [rawExpression, dayExpression, dateTimeExpression].forEach((expression) => {
+      if (groupByFields.includes(expression)) {
+        removeGroupByField(expression);
+      }
+    });
+
+    if (aggregate === null) {
+      if (field.aggregate !== 'none') {
+        updateFieldAggregate(field, 'none');
+      }
       return;
     }
 
-    updateFieldAggregate(field, aggregate);
-
-    if (!hasPreviousSelection && !hasNextSelection) {
-      addGroupByField(nextExpression);
+    if (field.aggregate !== aggregate) {
+      updateFieldAggregate(field, aggregate);
     }
+
+    addGroupByField(getGroupExpression(field, aggregate));
   };
 
   const hasAggregates = mainTableFields.some((f) => isTrueAggregate(f.aggregate));
@@ -121,22 +147,25 @@ export function OrderByLimit() {
 
           <div className="flex flex-wrap gap-2">
             {uniqueGroupableFields.map((field) => {
-              const fieldRef = formatSelectedFieldExpression(field);
-              const isSelected = groupByFields.includes(fieldRef);
+              const rawFieldRef = getGroupExpression(field, 'none');
               const fieldLabel = field.sourceAlias || field.tableName;
               const canUseTimeGrouping = supportsTimeGrouping(field.fieldName, field.fieldType);
-              const dayExpression = formatSelectedFieldExpression({ ...field, aggregate: 'DATE' });
-              const dateTimeExpression = formatSelectedFieldExpression({ ...field, aggregate: 'DATETIME' });
-              const isDaySelected = groupByFields.includes(dayExpression) && field.aggregate === 'DATE';
-              const isDateTimeSelected = groupByFields.includes(dateTimeExpression) && field.aggregate === 'DATETIME';
+              const currentGroupMode = getCurrentGroupMode(field);
+              const isRawSelected = currentGroupMode === 'none';
+              const isDaySelected = currentGroupMode === 'DATE';
+              const isDateTimeSelected = currentGroupMode === 'DATETIME';
 
               return (
-                <div key={`${field.id}-${field.aggregate}`} className="flex flex-wrap items-center gap-2">
+                <div key={field.id} className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => handleGroupByToggle(fieldRef, isSelected)}
+                    onClick={() =>
+                      canUseTimeGrouping
+                        ? applyGroupMode(field, isRawSelected ? null : 'none')
+                        : handleGroupByToggle(rawFieldRef, isRawSelected)
+                    }
                     className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors ${
-                      isSelected
+                      isRawSelected
                         ? 'border border-primary-500 bg-primary-500/20 text-primary-500'
                         : 'border border-[var(--border-default)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:border-primary-500'
                     }`}
@@ -151,7 +180,7 @@ export function OrderByLimit() {
                     <>
                       <button
                         type="button"
-                        onClick={() => handleTimeGroupBy(field, 'DATE')}
+                        onClick={() => applyGroupMode(field, isDaySelected ? null : 'DATE')}
                         className={`rounded-md px-2 py-1 text-[11px] transition-colors ${
                           isDaySelected
                             ? 'border border-primary-500 bg-primary-500/20 text-primary-500'
@@ -162,7 +191,7 @@ export function OrderByLimit() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleTimeGroupBy(field, 'DATETIME')}
+                        onClick={() => applyGroupMode(field, isDateTimeSelected ? null : 'DATETIME')}
                         className={`rounded-md px-2 py-1 text-[11px] transition-colors ${
                           isDateTimeSelected
                             ? 'border border-primary-500 bg-primary-500/20 text-primary-500'

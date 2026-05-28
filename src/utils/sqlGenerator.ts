@@ -1,5 +1,7 @@
 import type {
   JoinConfig,
+  MetricScopePreset,
+  NumericTransformType,
   SelectedField,
   WhereCondition,
   WhereOperator,
@@ -7,6 +9,7 @@ import type {
   AggregateType,
 } from '@/types';
 import { stripMappingsFromComment } from '@/utils/fieldMapping';
+import { getMetricScopeShortLabel } from '@/utils/metricScope';
 
 export function isTrueAggregate(aggregate: AggregateType): boolean {
   return ['SUM', 'AVG', 'COUNT', 'MAX', 'MIN'].includes(aggregate);
@@ -29,6 +32,21 @@ function getAggregateFunction(aggregate: AggregateType): string {
   }
 }
 
+function applyNumericTransform(expression: string, transform: NumericTransformType | undefined): string {
+  switch (transform || 'NONE') {
+    case 'DIVIDE_100':
+    case 'PERCENT_100':
+      return `(${expression} / 100)`;
+    case 'DIVIDE_1000':
+      return `(${expression} / 1000)`;
+    case 'PERCENT_10000':
+      return `(${expression} / 10000)`;
+    case 'NONE':
+    default:
+      return expression;
+  }
+}
+
 export function formatSelectedFieldExpression(field: SelectedField): string {
   const fieldRef = formatFieldName(field.tableName, field.fieldName, field.sourceAlias);
 
@@ -41,10 +59,39 @@ export function formatSelectedFieldExpression(field: SelectedField): string {
   }
 
   if (isTrueAggregate(field.aggregate)) {
-    return `${getAggregateFunction(field.aggregate)}(${fieldRef})`;
+    return applyNumericTransform(`${getAggregateFunction(field.aggregate)}(${fieldRef})`, field.numericTransform);
   }
 
-  return fieldRef;
+  return applyNumericTransform(fieldRef, field.numericTransform);
+}
+
+function buildMetricScopeCondition(scope: MetricScopePreset | undefined, mainTable: string): string | null {
+  const flowPointRef = formatFieldName(mainTable, 'flow_point');
+  const enterStatusRef = formatFieldName(mainTable, 'enter_status');
+  const institutionOrderRef = formatFieldName(mainTable, 'has_institution_order');
+  const settleTypeRef = formatFieldName(mainTable, 'order_settle_type');
+
+  switch (scope || 'ALL') {
+    case 'VALID_ORDER':
+      return `${flowPointRef} IN ('PAY_SUCC', 'SETTLE', 'CONFIRM')`;
+    case 'PAY_SUCCESS':
+      return `${flowPointRef} = 'PAY_SUCC'`;
+    case 'SETTLED':
+      return `${flowPointRef} = 'SETTLE'`;
+    case 'ENTERED':
+      return `${enterStatusRef} = '1'`;
+    case 'REFUND':
+      return `${flowPointRef} = 'REFUND'`;
+    case 'INSTITUTION_ORDER':
+      return `${institutionOrderRef} = '1'`;
+    case 'ONLINE_SETTLE':
+      return `${settleTypeRef} = '2'`;
+    case 'OFFLINE_SETTLE':
+      return `${settleTypeRef} = '1'`;
+    case 'ALL':
+    default:
+      return null;
+  }
 }
 
 function formatFieldAlias(comment: string): string {
@@ -77,6 +124,16 @@ function escapeSqlString(value: string): string {
 function buildMappingAlias(field: SelectedField): string {
   const baseLabel = cleanComment(field.fieldComment) || field.alias || field.fieldName;
   return `${baseLabel}名称`;
+}
+
+function buildFieldAlias(field: SelectedField): string {
+  const baseLabel = cleanComment(field.fieldComment) || field.alias || field.fieldName;
+  const scope = field.metricScope || 'ALL';
+  let nextLabel = baseLabel;
+  if (scope !== 'ALL') {
+    nextLabel = `${nextLabel}${getMetricScopeShortLabel(scope)}`;
+  }
+  return nextLabel;
 }
 
 function formatMappedField(field: SelectedField, fieldRef: string): string | null {
@@ -128,7 +185,7 @@ function formatWhereOperator(operator: WhereOperator): string {
   }
 }
 
-export function generateSelectClause(fields: SelectedField[]): string {
+export function generateSelectClause(fields: SelectedField[], mainTable: string): string {
   if (fields.length === 0) {
     return 'SELECT';
   }
@@ -141,17 +198,42 @@ export function generateSelectClause(fields: SelectedField[]): string {
 
     const alias = f.fieldComment || f.alias || '';
     if (f.aggregate === 'none') {
-      return `  ${fieldRef} ${formatFieldAlias(alias)}`.trim();
+      return `  ${applyNumericTransform(fieldRef, f.numericTransform)} ${formatFieldAlias(buildFieldAlias(f) || alias)}`.trim();
     }
 
     if (f.aggregate === 'DATE' || f.aggregate === 'DATETIME') {
       return `  ${formatSelectedFieldExpression(f)} ${formatFieldAlias(alias)}`.trim();
     }
 
-    return `  ${getAggregateFunction(f.aggregate)}(${fieldRef}) ${formatFieldAlias(alias)}`.trim();
+    return formatAggregateSelectField(f, mainTable);
   });
 
   return `SELECT\n${selectParts.join(',\n')}`;
+}
+
+function formatAggregateSelectField(field: SelectedField, mainTable: string): string {
+  const fieldRef = formatFieldName(field.tableName, field.fieldName, field.sourceAlias);
+  const alias = buildFieldAlias(field);
+  const metricCondition = buildMetricScopeCondition(field.metricScope, mainTable);
+
+  if (!metricCondition) {
+    return `  ${applyNumericTransform(`${getAggregateFunction(field.aggregate)}(${fieldRef})`, field.numericTransform)} ${formatFieldAlias(alias)}`.trim();
+  }
+
+  switch (field.aggregate) {
+    case 'COUNT':
+      return `  COUNT(CASE WHEN ${metricCondition} THEN ${fieldRef} END) ${formatFieldAlias(alias)}`.trim();
+    case 'SUM':
+      return `  ${applyNumericTransform(`SUM(CASE WHEN ${metricCondition} THEN ${fieldRef} ELSE 0 END)`, field.numericTransform)} ${formatFieldAlias(alias)}`.trim();
+    case 'AVG':
+      return `  ${applyNumericTransform(`AVG(CASE WHEN ${metricCondition} THEN ${fieldRef} END)`, field.numericTransform)} ${formatFieldAlias(alias)}`.trim();
+    case 'MAX':
+      return `  ${applyNumericTransform(`MAX(CASE WHEN ${metricCondition} THEN ${fieldRef} END)`, field.numericTransform)} ${formatFieldAlias(alias)}`.trim();
+    case 'MIN':
+      return `  ${applyNumericTransform(`MIN(CASE WHEN ${metricCondition} THEN ${fieldRef} END)`, field.numericTransform)} ${formatFieldAlias(alias)}`.trim();
+    default:
+      return `  ${applyNumericTransform(`${getAggregateFunction(field.aggregate)}(${fieldRef})`, field.numericTransform)} ${formatFieldAlias(alias)}`.trim();
+  }
 }
 
 export function generateFromClause(mainTable: string): string {
@@ -233,7 +315,7 @@ export function generateLimitClause(limit: number | null): string {
 export function generateSQL(draft: SQLDraft): string {
   const parts: string[] = [];
 
-  const selectClause = generateSelectClause(draft.selectedFields);
+  const selectClause = generateSelectClause(draft.selectedFields, draft.mainTable);
   parts.push(selectClause);
 
   const fromClause = generateFromClause(draft.mainTable);

@@ -3,8 +3,10 @@ import { useQueryBuilderStore } from '@/stores/useQueryBuilderStore';
 import { isNumericType } from '@/utils/jsonParser';
 import { extractMappingsFromComment } from '@/utils/fieldMapping';
 import { cleanComment } from '@/utils/sqlGenerator';
+import { getAvailableMetricScopes, getMetricScopeLabel, getMetricScopeShortLabel } from '@/utils/metricScope';
+import { getNumericTransformLabel, getNumericTransformShortLabel, NUMERIC_TRANSFORM_OPTIONS } from '@/utils/numericTransform';
 import { useMemo, useState } from 'react';
-import type { AggregateType, SelectedField, Table } from '@/types';
+import type { AggregateType, MetricScopePreset, NumericTransformType, SelectedField, Table } from '@/types';
 
 const AGGREGATE_OPTIONS: { value: AggregateType; label: string; shortLabel: string }[] = [
   { value: 'none', label: '原始', shortLabel: '原始' },
@@ -56,10 +58,14 @@ export function FieldSelector() {
     addField,
     removeField,
     updateFieldAggregate,
+    updateFieldMetricScope,
+    updateFieldNumericTransform,
   } = useQueryBuilderStore();
 
   const [mainTableSearch, setMainTableSearch] = useState('');
   const [openAggregateFieldId, setOpenAggregateFieldId] = useState<string | null>(null);
+  const [openMetricScopeFieldId, setOpenMetricScopeFieldId] = useState<string | null>(null);
+  const [openNumericTransformFieldId, setOpenNumericTransformFieldId] = useState<string | null>(null);
 
   const allTables = useMemo(
     () =>
@@ -160,6 +166,8 @@ export function FieldSelector() {
       fieldComment,
       fieldType,
       aggregate: 'none',
+      metricScope: 'ALL',
+      numericTransform: 'NONE',
       valueMappings: mappings,
     };
     addField(newField);
@@ -179,6 +187,14 @@ export function FieldSelector() {
 
   const handleAggregateChange = (field: SelectedField, aggregate: AggregateType) => {
     updateFieldAggregate(field, aggregate);
+  };
+
+  const handleMetricScopeChange = (field: SelectedField, metricScope: MetricScopePreset) => {
+    updateFieldMetricScope(field, metricScope);
+  };
+
+  const handleNumericTransformChange = (field: SelectedField, numericTransform: NumericTransformType) => {
+    updateFieldNumericTransform(field, numericTransform);
   };
 
   const handleToggleAllMainTableFields = () => {
@@ -398,97 +414,185 @@ export function FieldSelector() {
             {selectedFields.map((field) => (
               <div
                 key={field.id}
-                className="flex items-center gap-2 rounded bg-primary-500/10 px-2 py-2 text-xs text-primary-500"
+                className="rounded bg-primary-500/10 px-2.5 py-2 text-xs text-primary-500"
               >
-                <span className="min-w-0 flex-1 truncate">
-                  {(field.sourceAlias || field.tableName)}.{field.fieldName}
-                  {field.fieldComment && (
-                    <span className="opacity-70" title={cleanComment(field.fieldComment)}>
-                      {' '}({cleanComment(field.fieldComment)})
-                    </span>
-                  )}
-                </span>
-                <select
-                  value={field.aggregate}
-                  onChange={() => undefined}
-                  className="hidden"
-                />
-                <div
-                  className="relative w-28 flex-shrink-0"
-                  tabIndex={0}
-                  onBlur={(e) => {
-                    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
-                      setOpenAggregateFieldId((current) => (current === field.id ? null : current));
-                    }
-                  }}
-                >
-                  <button
-                    type="button"
-                    title={AGGREGATE_OPTIONS.find((opt) => opt.value === field.aggregate)?.label}
-                    onClick={() =>
-                      setOpenAggregateFieldId((current) => (current === field.id ? null : field.id))
-                    }
-                    className="flex w-full items-center justify-between rounded border border-[var(--border-default)] bg-[var(--bg-surface)] px-2 py-1 text-xs text-[var(--text-secondary)] focus:border-primary-500 focus:outline-none"
-                  >
-                    <span className="truncate">
-                      {AGGREGATE_OPTIONS.find((opt) => opt.value === field.aggregate)?.shortLabel || '原始'}
-                    </span>
-                    <svg className="ml-2 h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m6 9 6 6 6-6" />
-                    </svg>
-                  </button>
+                <div className="min-w-0">
+                  <div className="truncate font-medium">
+                    {(field.sourceAlias || field.tableName)}.{field.fieldName}
+                    {field.fieldComment && (
+                      <span className="opacity-70" title={cleanComment(field.fieldComment)}>
+                        {' '}({cleanComment(field.fieldComment)})
+                      </span>
+                    )}
+                  </div>
+                </div>
 
-                  {openAggregateFieldId === field.id && (
-                    <div className="absolute right-0 top-full z-20 mt-1 w-52 rounded-md border border-[var(--border-default)] bg-[var(--bg-surface)] p-1 shadow-lg">
-                      {AGGREGATE_OPTIONS.filter((opt) =>
-                        opt.value === 'none' ||
-                        opt.value === 'COUNT' ||
-                        isNumericType(field.fieldType) ||
-                        (supportsTimeFormatting(field.fieldName, field.fieldType) &&
-                          (opt.value === 'DATE' || opt.value === 'DATETIME'))
-                      ).map((opt) => (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => {
-                            handleAggregateChange(field, opt.value);
-                            setOpenAggregateFieldId(null);
-                          }}
-                          className={`block w-full rounded px-2 py-1.5 text-left text-xs transition-colors ${
-                            field.aggregate === opt.value
-                              ? 'bg-primary-500/10 text-primary-500'
-                              : 'text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]'
-                          }`}
-                          title={opt.label}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <select
+                    value={field.aggregate}
+                    onChange={() => undefined}
+                    className="hidden"
+                  />
+                  <div
+                    className="relative w-24 flex-shrink-0"
+                    tabIndex={0}
+                    onBlur={(e) => {
+                      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                        setOpenAggregateFieldId((current) => (current === field.id ? null : current));
+                      }
+                    }}
+                  >
+                    <button
+                      type="button"
+                      title={AGGREGATE_OPTIONS.find((opt) => opt.value === field.aggregate)?.label}
+                      onClick={() =>
+                        setOpenAggregateFieldId((current) => (current === field.id ? null : field.id))
+                      }
+                      className="flex w-full items-center justify-between rounded border border-[var(--border-default)] bg-[var(--bg-surface)] px-2 py-1 text-xs text-[var(--text-secondary)] focus:border-primary-500 focus:outline-none"
+                    >
+                      <span className="truncate">
+                        {AGGREGATE_OPTIONS.find((opt) => opt.value === field.aggregate)?.shortLabel || '原始'}
+                      </span>
+                      <svg className="ml-1 h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m6 9 6 6 6-6" />
+                      </svg>
+                    </button>
+
+                    {openAggregateFieldId === field.id && (
+                      <div className="absolute left-0 top-full z-20 mt-1 w-52 rounded-md border border-[var(--border-default)] bg-[var(--bg-surface)] p-1 shadow-lg">
+                        {AGGREGATE_OPTIONS.filter((opt) =>
+                          opt.value === 'none' ||
+                          opt.value === 'COUNT' ||
+                          isNumericType(field.fieldType) ||
+                          (supportsTimeFormatting(field.fieldName, field.fieldType) &&
+                            (opt.value === 'DATE' || opt.value === 'DATETIME'))
+                        ).map((opt) => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => {
+                              handleAggregateChange(field, opt.value);
+                              setOpenAggregateFieldId(null);
+                            }}
+                            className={`block w-full rounded px-2 py-1.5 text-left text-xs transition-colors ${
+                              field.aggregate === opt.value
+                                ? 'bg-primary-500/10 text-primary-500'
+                                : 'text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]'
+                            }`}
+                            title={opt.label}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {mainTable && ['SUM', 'AVG', 'COUNT', 'MAX', 'MIN'].includes(field.aggregate) && (
+                    <div
+                      className="relative w-20 flex-shrink-0"
+                      tabIndex={0}
+                      onBlur={(e) => {
+                        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                          setOpenMetricScopeFieldId((current) => (current === field.id ? null : current));
+                        }
+                      }}
+                    >
+                      <button
+                        type="button"
+                        title={getMetricScopeLabel(field.metricScope)}
+                        onClick={() =>
+                          setOpenMetricScopeFieldId((current) => (current === field.id ? null : field.id))
+                        }
+                        className="flex w-full items-center justify-between rounded border border-[var(--border-default)] bg-[var(--bg-surface)] px-2 py-1 text-xs text-[var(--text-secondary)] focus:border-primary-500 focus:outline-none"
+                      >
+                        <span className="truncate">{getMetricScopeShortLabel(field.metricScope)}</span>
+                        <svg className="ml-1 h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m6 9 6 6 6-6" />
+                        </svg>
+                      </button>
+
+                      {openMetricScopeFieldId === field.id && (
+                        <div className="absolute left-0 top-full z-20 mt-1 w-40 rounded-md border border-[var(--border-default)] bg-[var(--bg-surface)] p-1 shadow-lg">
+                          {getAvailableMetricScopes(mainTable.fields).map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => {
+                                handleMetricScopeChange(field, option.value);
+                                setOpenMetricScopeFieldId(null);
+                              }}
+                              className={`block w-full rounded px-2 py-1.5 text-left text-xs transition-colors ${
+                                (field.metricScope || 'ALL') === option.value
+                                  ? 'bg-primary-500/10 text-primary-500'
+                                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]'
+                              }`}
+                              title={option.label}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
+
+                  {isNumericType(field.fieldType) && field.aggregate !== 'COUNT' && field.aggregate !== 'DATE' && field.aggregate !== 'DATETIME' && (
+                    <div
+                      className="relative w-24 flex-shrink-0"
+                      tabIndex={0}
+                      onBlur={(e) => {
+                        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                          setOpenNumericTransformFieldId((current) => (current === field.id ? null : current));
+                        }
+                      }}
+                    >
+                      <button
+                        type="button"
+                        title={getNumericTransformLabel(field.numericTransform)}
+                        onClick={() =>
+                          setOpenNumericTransformFieldId((current) => (current === field.id ? null : field.id))
+                        }
+                        className="flex w-full items-center justify-between rounded border border-[var(--border-default)] bg-[var(--bg-surface)] px-2 py-1 text-xs text-[var(--text-secondary)] focus:border-primary-500 focus:outline-none"
+                      >
+                        <span className="truncate">{getNumericTransformShortLabel(field.numericTransform)}</span>
+                        <svg className="ml-1 h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m6 9 6 6 6-6" />
+                        </svg>
+                      </button>
+
+                      {openNumericTransformFieldId === field.id && (
+                        <div className="absolute left-0 top-full z-20 mt-1 w-40 rounded-md border border-[var(--border-default)] bg-[var(--bg-surface)] p-1 shadow-lg">
+                          {NUMERIC_TRANSFORM_OPTIONS.map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => {
+                                handleNumericTransformChange(field, option.value);
+                                setOpenNumericTransformFieldId(null);
+                              }}
+                              className={`block w-full rounded px-2 py-1.5 text-left text-xs transition-colors ${
+                                (field.numericTransform || 'NONE') === option.value
+                                  ? 'bg-primary-500/10 text-primary-500'
+                                  : 'text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]'
+                              }`}
+                              title={option.label}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => removeField(field)}
+                    className="ml-auto rounded px-2 py-1 text-xs text-risk-high hover:bg-risk-high/10"
+                  >
+                    删除
+                  </button>
                 </div>
-                <button
-                  onClick={() =>
-                    handleAddFieldInstance(
-                      field.tableName,
-                      field.tableComment,
-                      field.fieldName,
-                      field.fieldComment,
-                      field.fieldType,
-                      field.tableId || field.tableName,
-                      field.sourceAlias
-                    )
-                  }
-                  className="rounded px-2 py-1 text-xs text-primary-500 hover:bg-primary-500/10"
-                >
-                  复制
-                </button>
-                <button
-                  onClick={() => removeField(field)}
-                  className="rounded px-2 py-1 text-xs text-risk-high hover:bg-risk-high/10"
-                >
-                  删除
-                </button>
               </div>
             ))}
           </div>
